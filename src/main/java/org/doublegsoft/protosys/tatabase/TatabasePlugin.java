@@ -131,37 +131,37 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
   @Override
   public void decorate(ApplicationDefinition application, HashObject globals) throws IOException {
     for (UsecaseDefinition usecase : application.getUsecases()) {
-      PageDefinition page = usecase.getPage();
-      for (WidgetDefinition widget : page.getPageWidgets()) {
-        String id = widget.getId();
-        String type = widget.getType();
-        if ("listview".equalsIgnoreCase(type)) {
-          StringHolder tatabaseDsl = new StringHolder();
-          tatabaseDsl.append(id).append("[20]<").linefeed();
-          int index = 0;
-          int size = widget.getWidgets().size();
-          for (WidgetDefinition child : widget.getWidgets()) {
-            tatabaseDsl.indent(4).append(child.getId()).append(": ").append(widget2DomainType(child));
-            if (index != size - 1) {
-              tatabaseDsl.append(",");
-            }
-            tatabaseDsl.linefeed();
-            index++;
-          }
-          tatabaseDsl.append(">").linefeed().linefeed();
-          HashObject mock = new HashObject();
-          mock.set("mock", id);
-          mock.set("json", new TatabaseBuilder().parse(tatabaseDsl.toString()).build(Format.JSON).values().iterator().next());
-          mock.set("ttb", tatabaseDsl.toString());
-          globals.add("mocks", mock);
-        } else if ("form".equalsIgnoreCase(type)) {
-          // TODO
-          HashObject form = new HashObject();
-          for (WidgetDefinition child : widget.getWidgets()) {
-
-          }
-        }
-      }
+//      PageDefinition page = usecase.getPage();
+//      for (WidgetDefinition widget : page.getPageWidgets()) {
+//        String id = widget.getId();
+//        String type = widget.getType();
+//        if ("listview".equalsIgnoreCase(type)) {
+//          StringHolder tatabaseDsl = new StringHolder();
+//          tatabaseDsl.append(id).append("[20]<").linefeed();
+//          int index = 0;
+//          int size = widget.getWidgets().size();
+//          for (WidgetDefinition child : widget.getWidgets()) {
+//            tatabaseDsl.indent(4).append(child.getId()).append(": ").append(widget2DomainType(child));
+//            if (index != size - 1) {
+//              tatabaseDsl.append(",");
+//            }
+//            tatabaseDsl.linefeed();
+//            index++;
+//          }
+//          tatabaseDsl.append(">").linefeed().linefeed();
+//          HashObject mock = new HashObject();
+//          mock.set("mock", id);
+//          mock.set("json", new TatabaseBuilder().parse(tatabaseDsl.toString()).build(Format.JSON).values().iterator().next());
+//          mock.set("ttb", tatabaseDsl.toString());
+//          globals.add("mocks", mock);
+//        } else if ("form".equalsIgnoreCase(type)) {
+//          // TODO
+//          HashObject form = new HashObject();
+//          for (WidgetDefinition child : widget.getWidgets()) {
+//
+//          }
+//        }
+//      }
     }
   }
 
