@@ -12,6 +12,7 @@ import com.doublegsoft.jcommons.metaui.PageDefinition;
 import com.doublegsoft.jcommons.metaui.WidgetDefinition;
 import io.doublegsoft.tatabase.Format;
 import io.doublegsoft.tatabase.TatabaseBuilder;
+import io.doublegsoft.typebase.EnumValue;
 import org.doublegsoft.protosys.commons.FileSystemTemplateBasedPlugin;
 
 import java.io.IOException;
@@ -77,11 +78,11 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
         } else if (domainType.toLowerCase().startsWith("enum")
             || domainType.toLowerCase().startsWith("state")) {
           String enumexpr = domainType.replace("ENUM", "enum").replace("state", "enum");
-          List<StringPair> pairs = TYPEBASE.enumtype(enumexpr);
+          List<EnumValue> pairs = TYPEBASE.enumtype(enumexpr);
           StringHolder vals = new StringHolder();
           vals.append("[");
           pairs.forEach(pair -> {
-            vals.append(pair.getKey()).append(", ");
+            vals.append(pair.getCode()).append(", ");
           });
           // remove the last comma and space
           expr = vals.toString().substring(0, vals.toString().length() - 2) + "]";
