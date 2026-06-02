@@ -10,6 +10,7 @@ import com.doublegsoft.jcommons.metamodel.ApplicationDefinition;
 import com.doublegsoft.jcommons.metamodel.UsecaseDefinition;
 import com.doublegsoft.jcommons.metaui.PageDefinition;
 import com.doublegsoft.jcommons.metaui.WidgetDefinition;
+import com.doublegsoft.jcommons.metaui.layout.Position;
 import com.doublegsoft.jcommons.programming.c.CConventions;
 import com.doublegsoft.jcommons.programming.go.GoConventions;
 import com.doublegsoft.jcommons.programming.objc.ObjcConventions;
@@ -21,6 +22,8 @@ import freemarker.cache.FileTemplateLoader;
 import freemarker.cache.MultiTemplateLoader;
 import freemarker.cache.TemplateLoader;
 import freemarker.template.DefaultObjectWrapper;
+import io.doublegsoft.guidbase.GuidbaseContext;
+import io.doublegsoft.guidbase.GuidbaseWidget;
 import io.doublegsoft.modelbase.Modelbase;
 import io.doublegsoft.tatabase.Format;
 import io.doublegsoft.tatabase.Tatabase;
@@ -72,20 +75,18 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
   public static void main(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption("m", "model", true, "模型定义文件");
-    options.addOption("d", "dependent-model", true, "依赖模型定义文件");
+    options.addOption("m", "modelbase-model", true, "Modelbase模型定义文件");
+    options.addOption("g", "guidbase-model", true, "Guidbase模型定义文件");
     options.addOption("t", "template-root", true, "模板定义根目录");
     options.addOption("o", "output-root", true, "输出跟路径");
-    options.addOption("b", "tatabase", true, "tatabase数据目录");
     options.addOption("l", "license", true, "license数据文件");
     options.addOption("g", "globals", true, "全局常量");
-    options.addOption("a", "apifiles", true, "API数据目录");
 
     CommandLineParser parser = new DefaultParser();
     CommandLine cmd = parser.parse(options, args);
 
-    String modelPath = cmd.getOptionValue("model");
-    String dependentModelPath = cmd.getOptionValue("dependent-model");
+    String modelbasePath = cmd.getOptionValue("modelbase-model");
+    String guidbasePath = cmd.getOptionValue("guidbase-model");
     String templateRoot = cmd.getOptionValue("template-root");
     String outputRoot = cmd.getOptionValue("output-root");
     String licensePath = cmd.getOptionValue("license");
@@ -110,20 +111,28 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
     globalVars.set("inflector", new Inflector());
 
     TatabasePlugin tatabase = new TatabasePlugin();
-    if (dependentModelPath != null) {
-      modelPath += ";" + dependentModelPath;
+    if (guidbasePath != null) {
+      modelbasePath += ";" + guidbasePath;
     }
-    ModelDefinition model = tatabase.createModelFromModelbase(modelPath.split(";"));
-
     ApplicationDefinition app = new ApplicationDefinition();
-
     String applicationName = globalVars.get("application");
     String databaseName = globalVars.get("database");
     if (applicationName == null) {
       applicationName = globalVars.get("application");
     }
     app.setName(applicationName);
-    app.setModel(model);
+
+    ModelDefinition dataModel = tatabase.createModelFromModelbase(modelbasePath.split(";"));
+    app.setModel(dataModel);
+    if (!Strings.isEmpty(guidbasePath)) {
+      String[] paths = guidbasePath.split(";");
+      StringBuilder guidbaseModel = new StringBuilder();
+      for (String guidbaseFile : paths) {
+        guidbaseModel.append(new String(Files.readAllBytes(new File(guidbaseFile).toPath()))).append("\n");
+      }
+      List<PageDefinition> pages = createPages(guidbaseModel.toString(), tatabase);
+      pages.forEach(app::addPage);
+    }
 
     String namingClass = globalVars.get("naming");
     if (namingClass != null) {
@@ -137,7 +146,7 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
       globalVars.set("globalNamingConvention", naming);
     }
 
-    for (ObjectDefinition obj : model.getObjects()) {
+    for (ObjectDefinition obj : dataModel.getObjects()) {
       if (obj.isLabelled("generated")) {
         continue;
       }
@@ -156,10 +165,46 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
     }
 
     try {
-      tatabase.prototype(app, model, outputRoot, templateRoot, globalVars);
+      tatabase.prototype(app, dataModel, outputRoot, templateRoot, globalVars);
     } catch (Throwable cause) {
       cause.printStackTrace();
     }
+  }
 
+  public static List<PageDefinition> createPages(String guidbaseSource, TatabasePlugin tatabase) throws IOException {
+    List<PageDefinition> retVal = new ArrayList<>();
+    List<GuidbaseContext> guicctxs = GuidbaseContext.from(guidbaseSource);
+
+    for (GuidbaseContext guicctx : guicctxs) {
+      String pageId = guicctx.page().id();
+      String module = guicctx.page().attr("module");
+      if (module == null) {
+        if (pageId.contains("/")) {
+          module = pageId.substring(0, pageId.lastIndexOf("/"));
+        } else {
+          module = "unknown";
+        }
+      }
+
+      PageDefinition pageDef = new PageDefinition(module);
+      if (pageId.contains("/")) {
+        pageDef.setName(pageId.substring(pageId.lastIndexOf("/") + 1));
+      } else {
+        pageDef.setName(pageId);
+      }
+      pageDef.setType("page");
+      pageDef.setModule(module);
+      pageDef.setId(guicctx.page().id());
+      pageDef.setTitle(guicctx.page().attr("title"));
+      pageDef.setPosition(Position.at(guicctx.page().attr("position")));
+      guicctx.page().attrs().forEach(attr -> {
+        pageDef.addOption(attr.name(), attr.value());
+      });
+      for (GuidbaseWidget widget : guicctx.page().children()) {
+        pageDef.addWidget(tatabase.convertToWidget(widget, pageDef));
+      }
+      retVal.add(pageDef);
+    }
+    return retVal;
   }
 }
