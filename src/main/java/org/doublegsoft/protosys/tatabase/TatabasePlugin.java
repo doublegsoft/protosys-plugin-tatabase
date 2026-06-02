@@ -10,14 +10,36 @@ import com.doublegsoft.jcommons.metamodel.ApplicationDefinition;
 import com.doublegsoft.jcommons.metamodel.UsecaseDefinition;
 import com.doublegsoft.jcommons.metaui.PageDefinition;
 import com.doublegsoft.jcommons.metaui.WidgetDefinition;
+import com.doublegsoft.jcommons.programming.c.CConventions;
+import com.doublegsoft.jcommons.programming.go.GoConventions;
+import com.doublegsoft.jcommons.programming.objc.ObjcConventions;
+import com.doublegsoft.jcommons.programming.rust.RustConventions;
+import com.doublegsoft.jcommons.utils.Inflector;
+import com.doublegsoft.jcommons.utils.Strings;
+import com.google.gson.Gson;
+import freemarker.cache.FileTemplateLoader;
+import freemarker.cache.MultiTemplateLoader;
+import freemarker.cache.TemplateLoader;
+import freemarker.template.DefaultObjectWrapper;
+import io.doublegsoft.modelbase.Modelbase;
 import io.doublegsoft.tatabase.Format;
+import io.doublegsoft.tatabase.Tatabase;
 import io.doublegsoft.tatabase.TatabaseBuilder;
 import io.doublegsoft.typebase.EnumValue;
+import io.doublegsoft.typebase.Typebase;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.Options;
 import org.doublegsoft.protosys.commons.FileSystemTemplateBasedPlugin;
 
+import java.io.File;
 import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
+import java.nio.file.Files;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.*;
 
 /**
  * Uses modelbase dsl language approach to generate test data.
@@ -28,149 +50,116 @@ import java.util.List;
  */
 public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
 
-  /**
-   * Generates insert-sql statements as sql format for the data model in application.
-   *
-   * @param model
-   *          the application data model
-   *
-   * @param globals
-   *          the data and generated data holder
-   *
-   * @throws IOException
-   *          in case of io errors
-   */
-  @Override
-  public void decorate(ModelDefinition model, HashObject globals) throws IOException {
-    if (model == null || model.getObjects().length == 0) {
-      return;
+  public void prototype(ApplicationDefinition app, ModelDefinition model, String outputRoot, String templateRoot, HashObject globals) throws IOException {
+    FileTemplateLoader specific = new FileTemplateLoader(new File(templateRoot));
+    // FileTemplateLoader specificForTest = new FileTemplateLoader(new File("/Volumes/EXPORT/local/works/doublegsoft.io/modelbase/03.Development/modelbase-data"));
+    FileTemplateLoader common = new FileTemplateLoader(new File(templateRoot + "/.."));
+    FileTemplateLoader common2 = new FileTemplateLoader(new File(templateRoot + "/../.."));
+    MultiTemplateLoader templateLoader = new MultiTemplateLoader(new TemplateLoader[]{common, common2, specific/*, specificForTest*/});
+    FREEMARKER.setTemplateLoader(templateLoader);
+    FREEMARKER.setSharedVariable("statics", ((DefaultObjectWrapper) FREEMARKER.getObjectWrapper()).getStaticModels());
+
+    decorate(model, globals);
+    decorate(app, globals);
+
+    if (globals != null) {
+      globalVariables.putAll(globals);
     }
-    // tatabase dsl for data model
-    StringHolder ttb = new StringHolder();
-    int size = 100;
+    globalVariables.put("objectConstructor", new freemarker.template.utility.ObjectConstructor());
+    visitAndRender(outputRoot, "", templateRoot, "", app, new HashObject());
+  }
+
+  public static void main(String[] args) throws Exception {
+    Options options = new Options();
+
+    options.addOption("m", "model", true, "模型定义文件");
+    options.addOption("d", "dependent-model", true, "依赖模型定义文件");
+    options.addOption("t", "template-root", true, "模板定义根目录");
+    options.addOption("o", "output-root", true, "输出跟路径");
+    options.addOption("b", "tatabase", true, "tatabase数据目录");
+    options.addOption("l", "license", true, "license数据文件");
+    options.addOption("g", "globals", true, "全局常量");
+    options.addOption("a", "apifiles", true, "API数据目录");
+
+    CommandLineParser parser = new DefaultParser();
+    CommandLine cmd = parser.parse(options, args);
+
+    String modelPath = cmd.getOptionValue("model");
+    String dependentModelPath = cmd.getOptionValue("dependent-model");
+    String templateRoot = cmd.getOptionValue("template-root");
+    String outputRoot = cmd.getOptionValue("output-root");
+    String licensePath = cmd.getOptionValue("license");
+    String globals = cmd.getOptionValue("globals");
+
+    // globals
+    HashObject globalVars = new HashObject();
+    Gson gson = new Gson();
+    if (globals != null) {
+      globalVars.putAll(gson.fromJson(globals, Map.class));
+    }
+
+    // license
+    String license = null;
+    if (licensePath != null) {
+      license = new String(Files.readAllBytes(new File(licensePath).toPath()), "UTF-8");
+      globalVars.set("license", license);
+    }
+
+    globalVars.set("typebase", new Typebase());
+    globalVars.set("tatabase", new Tatabase());
+    globalVars.set("inflector", new Inflector());
+
+    TatabasePlugin tatabase = new TatabasePlugin();
+    if (dependentModelPath != null) {
+      modelPath += ";" + dependentModelPath;
+    }
+    ModelDefinition model = tatabase.createModelFromModelbase(modelPath.split(";"));
+
+    ApplicationDefinition app = new ApplicationDefinition();
+
+    String applicationName = globalVars.get("application");
+    String databaseName = globalVars.get("database");
+    if (applicationName == null) {
+      applicationName = globalVars.get("application");
+    }
+    app.setName(applicationName);
+    app.setModel(model);
+
+    String namingClass = globalVars.get("naming");
+    if (namingClass != null) {
+      Object naming = Class.forName(namingClass).newInstance();
+      globalVars.set("naming", naming);
+    }
+
+    namingClass = globalVars.get("globalNamingConvention");
+    if (namingClass != null) {
+      Object naming = Class.forName(namingClass).newInstance();
+      globalVars.set("globalNamingConvention", naming);
+    }
+
     for (ObjectDefinition obj : model.getObjects()) {
-      if (obj.isLabelled("event")) {
-        continue;
-      } else if (obj.isLabelled("value")) {
+      if (obj.isLabelled("generated")) {
         continue;
       }
-      String table = obj.getPersistenceName().toLowerCase();
-      ttb.append(table).append("[" + size + "]<").linefeed();
-      int index = 0;
-      for (AttributeDefinition attr : obj.getAttributes()) {
-        String expr = "null";
-        String domainType = String.valueOf(attr.getConstraint().getDomainType());
-        if ("uuid".equalsIgnoreCase(domainType)) {
-          expr = "'" + attr.getParent().getName().toUpperCase() + "'" + " + [1, " + size + "]";
-        } else if ("lmt".equalsIgnoreCase(domainType)) {
-          expr = "lmt";
-        } else if (attr.getDirectRelationship() != null && attr.getConstraint().getDomainType() != null) {
-          ObjectDefinition directObject = attr.getDirectRelationship().getDirectTarget();
-          if (directObject.getIdentifiableAttribute() != null) {
-            expr = "&" + directObject.getPersistenceName().toLowerCase() + "(" +
-                directObject.getIdentifiableAttribute().getPersistenceName().toLowerCase() + ")";
-          } else {
-            expr = "null";
-          }
-        } else if (attr.isIdentifiable() && ("null".equalsIgnoreCase(domainType) || domainType.isEmpty())) {
-          // if no domain type and is id, specify it range code
-          expr = "'" + attr.getName() + "'" + " + [1, " + size + "]";
-        } else if (domainType.toLowerCase().startsWith("enum")
-            || domainType.toLowerCase().startsWith("state")) {
-          String enumexpr = domainType.replace("ENUM", "enum").replace("state", "enum");
-          List<EnumValue> pairs = TYPEBASE.enumtype(enumexpr);
-          StringHolder vals = new StringHolder();
-          vals.append("[");
-          pairs.forEach(pair -> {
-            vals.append(pair.getCode()).append(", ");
-          });
-          // remove the last comma and space
-          expr = vals.toString().substring(0, vals.toString().length() - 2) + "]";
-        } else if (domainType.toLowerCase().startsWith("string")) {
-          expr = "'" + attr.getPersistenceName().toUpperCase() + "' + [1, 100]";
-        } else if (domainType.indexOf("#") != -1) {
-          // domain type: organization#name
-          expr = domainType.toLowerCase();
-        } else {
-          // domain type: name
-          expr = "null";
+      if (!Strings.isEmpty(databaseName)) {
+        if (obj.isLabelled("persistence")) {
+          obj.getLabelledOptions("persistence").put("namespace", databaseName);
         }
-        if (attr.getPersistenceName() != null) {
-          ttb.indent(4).append(attr.getPersistenceName().toLowerCase()).append(": ").append(expr);
-        }
-        if (index != obj.getAttributes().length - 1) {
-          ttb.append(",");
-        }
-        ttb.linefeed();
-        index++;
       }
-      ttb.append(">").linefeed().linefeed();
+      Map<String, String> moduleOpts = new HashMap<>();
+      moduleOpts.putAll(obj.getLabelledOptions("module"));
+      if (obj.getModuleName() == null) {
+        obj.setModuleName(applicationName);
+        moduleOpts.put("name", applicationName);
+      }
+      obj.setLabelledOptions("module", moduleOpts);
     }
 
-    // tatabase sqls
     try {
-      Collection<?> testsqls = new TatabaseBuilder().parse(ttb.toString()).build(Format.SQL).values();
-      globals.set("testsqls", testsqls);
-    } catch (Exception ex) {
-      ex.printStackTrace(System.err);
+      tatabase.prototype(app, model, outputRoot, templateRoot, globalVars);
+    } catch (Throwable cause) {
+      cause.printStackTrace();
     }
-    globals.set("ttb", ttb.toString());
-  }
 
-  /**
-   * Generates mock data as json format for usecases in application.
-   *
-   * @param application
-   *          the application definition
-   *
-   * @param globals
-   *          the data and generated data holder
-   *
-   * @throws IOException
-   *          in case of io errors
-   */
-  @Override
-  public void decorate(ApplicationDefinition application, HashObject globals) throws IOException {
-    for (UsecaseDefinition usecase : application.getUsecases()) {
-//      PageDefinition page = usecase.getPage();
-//      for (WidgetDefinition widget : page.getPageWidgets()) {
-//        String id = widget.getId();
-//        String type = widget.getType();
-//        if ("listview".equalsIgnoreCase(type)) {
-//          StringHolder tatabaseDsl = new StringHolder();
-//          tatabaseDsl.append(id).append("[20]<").linefeed();
-//          int index = 0;
-//          int size = widget.getWidgets().size();
-//          for (WidgetDefinition child : widget.getWidgets()) {
-//            tatabaseDsl.indent(4).append(child.getId()).append(": ").append(widget2DomainType(child));
-//            if (index != size - 1) {
-//              tatabaseDsl.append(",");
-//            }
-//            tatabaseDsl.linefeed();
-//            index++;
-//          }
-//          tatabaseDsl.append(">").linefeed().linefeed();
-//          HashObject mock = new HashObject();
-//          mock.set("mock", id);
-//          mock.set("json", new TatabaseBuilder().parse(tatabaseDsl.toString()).build(Format.JSON).values().iterator().next());
-//          mock.set("ttb", tatabaseDsl.toString());
-//          globals.add("mocks", mock);
-//        } else if ("form".equalsIgnoreCase(type)) {
-//          // TODO
-//          HashObject form = new HashObject();
-//          for (WidgetDefinition child : widget.getWidgets()) {
-//
-//          }
-//        }
-//      }
-    }
-  }
-
-  private String widget2DomainType(WidgetDefinition widget) {
-    // TODO: ENRICH
-    if ("image".equalsIgnoreCase(widget.getType())) {
-      return "'http://via.placeholder.com/240x160'";
-    }
-    return "name";
   }
 }
