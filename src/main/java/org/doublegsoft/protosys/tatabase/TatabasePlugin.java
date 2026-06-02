@@ -77,9 +77,10 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
 
     options.addOption("m", "modelbase-model", true, "Modelbase模型定义文件");
     options.addOption("g", "guidbase-model", true, "Guidbase模型定义文件");
+    options.addOption("d", "tatabase-data", true, "Tatabase数据目录");
     options.addOption("t", "template-root", true, "模板定义根目录");
     options.addOption("o", "output-root", true, "输出跟路径");
-    options.addOption("l", "license", true, "license数据文件");
+    options.addOption("l", "license", true, "license文件");
     options.addOption("g", "globals", true, "全局常量");
 
     CommandLineParser parser = new DefaultParser();
@@ -87,6 +88,7 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
 
     String modelbasePath = cmd.getOptionValue("modelbase-model");
     String guidbasePath = cmd.getOptionValue("guidbase-model");
+    String tatabaseDir = cmd.getOptionValue("tatabase-data");
     String templateRoot = cmd.getOptionValue("template-root");
     String outputRoot = cmd.getOptionValue("output-root");
     String licensePath = cmd.getOptionValue("license");
@@ -107,13 +109,11 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
     }
 
     globalVars.set("typebase", new Typebase());
-    globalVars.set("tatabase", new Tatabase());
+    globalVars.set("tatabase", new Tatabase(tatabaseDir));
     globalVars.set("inflector", new Inflector());
 
     TatabasePlugin tatabase = new TatabasePlugin();
-    if (guidbasePath != null) {
-      modelbasePath += ";" + guidbasePath;
-    }
+
     ApplicationDefinition app = new ApplicationDefinition();
     String applicationName = globalVars.get("application");
     String databaseName = globalVars.get("database");
