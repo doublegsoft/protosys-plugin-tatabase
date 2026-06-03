@@ -1,20 +1,10 @@
 package org.doublegsoft.protosys.tatabase;
 
 import com.doublegsoft.jcommons.lang.HashObject;
-import com.doublegsoft.jcommons.lang.StringHolder;
-import com.doublegsoft.jcommons.lang.StringPair;
-import com.doublegsoft.jcommons.metabean.AttributeDefinition;
 import com.doublegsoft.jcommons.metabean.ModelDefinition;
-import com.doublegsoft.jcommons.metabean.ObjectDefinition;
 import com.doublegsoft.jcommons.metamodel.ApplicationDefinition;
-import com.doublegsoft.jcommons.metamodel.UsecaseDefinition;
 import com.doublegsoft.jcommons.metaui.PageDefinition;
-import com.doublegsoft.jcommons.metaui.WidgetDefinition;
 import com.doublegsoft.jcommons.metaui.layout.Position;
-import com.doublegsoft.jcommons.programming.c.CConventions;
-import com.doublegsoft.jcommons.programming.go.GoConventions;
-import com.doublegsoft.jcommons.programming.objc.ObjcConventions;
-import com.doublegsoft.jcommons.programming.rust.RustConventions;
 import com.doublegsoft.jcommons.utils.Inflector;
 import com.doublegsoft.jcommons.utils.Strings;
 import com.google.gson.Gson;
@@ -24,11 +14,7 @@ import freemarker.cache.TemplateLoader;
 import freemarker.template.DefaultObjectWrapper;
 import io.doublegsoft.guidbase.GuidbaseContext;
 import io.doublegsoft.guidbase.GuidbaseWidget;
-import io.doublegsoft.modelbase.Modelbase;
-import io.doublegsoft.tatabase.Format;
 import io.doublegsoft.tatabase.Tatabase;
-import io.doublegsoft.tatabase.TatabaseBuilder;
-import io.doublegsoft.typebase.EnumValue;
 import io.doublegsoft.typebase.Typebase;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -39,10 +25,9 @@ import org.doublegsoft.protosys.commons.FileSystemTemplateBasedPlugin;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Uses modelbase dsl language approach to generate test data.
@@ -55,7 +40,6 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
 
   public void prototype(ApplicationDefinition app, ModelDefinition model, String outputRoot, String templateRoot, HashObject globals) throws IOException {
     FileTemplateLoader specific = new FileTemplateLoader(new File(templateRoot));
-    // FileTemplateLoader specificForTest = new FileTemplateLoader(new File("/Volumes/EXPORT/local/works/doublegsoft.io/modelbase/03.Development/modelbase-data"));
     FileTemplateLoader common = new FileTemplateLoader(new File(templateRoot + "/.."));
     FileTemplateLoader common2 = new FileTemplateLoader(new File(templateRoot + "/../.."));
     MultiTemplateLoader templateLoader = new MultiTemplateLoader(new TemplateLoader[]{common, common2, specific/*, specificForTest*/});
@@ -74,7 +58,6 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
 
   public static void main(String[] args) throws Exception {
     Options options = new Options();
-
     options.addOption("m", "modelbase-model", true, "Modelbase模型定义文件");
     options.addOption("g", "guidbase-model", true, "Guidbase模型定义文件");
     options.addOption("d", "tatabase-data", true, "Tatabase数据目录");
@@ -146,24 +129,6 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
       globalVars.set("globalNamingConvention", naming);
     }
 
-    for (ObjectDefinition obj : dataModel.getObjects()) {
-      if (obj.isLabelled("generated")) {
-        continue;
-      }
-      if (!Strings.isEmpty(databaseName)) {
-        if (obj.isLabelled("persistence")) {
-          obj.getLabelledOptions("persistence").put("namespace", databaseName);
-        }
-      }
-      Map<String, String> moduleOpts = new HashMap<>();
-      moduleOpts.putAll(obj.getLabelledOptions("module"));
-      if (obj.getModuleName() == null) {
-        obj.setModuleName(applicationName);
-        moduleOpts.put("name", applicationName);
-      }
-      obj.setLabelledOptions("module", moduleOpts);
-    }
-
     try {
       tatabase.prototype(app, dataModel, outputRoot, templateRoot, globalVars);
     } catch (Throwable cause) {
@@ -185,7 +150,6 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
           module = "unknown";
         }
       }
-
       PageDefinition pageDef = new PageDefinition(module);
       if (pageId.contains("/")) {
         pageDef.setName(pageId.substring(pageId.lastIndexOf("/") + 1));
