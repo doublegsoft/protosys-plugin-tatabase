@@ -150,8 +150,8 @@
       <artifactId>tatabase</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.doublegsoft.jcommons</groupId>
-      <artifactId>jcommons-metavalue</artifactId>
+      <groupId>io.doublegsoft.valuebase</groupId>
+      <artifactId>valuebase</artifactId>
       <version>1.0</version>
     </dependency>
     <dependency>

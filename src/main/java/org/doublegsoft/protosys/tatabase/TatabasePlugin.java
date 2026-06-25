@@ -16,6 +16,7 @@ import io.doublegsoft.guidbase.GuidbaseContext;
 import io.doublegsoft.guidbase.GuidbaseWidget;
 import io.doublegsoft.tatabase.Tatabase;
 import io.doublegsoft.typebase.Typebase;
+import io.doublegsoft.valuebase.Valuebase;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.DefaultParser;
@@ -90,7 +91,7 @@ public class TatabasePlugin extends FileSystemTemplateBasedPlugin {
       license = new String(Files.readAllBytes(new File(licensePath).toPath()), "UTF-8");
       globalVars.set("license", license);
     }
-
+    globalVars.set("valuebase", new Valuebase());
     globalVars.set("typebase", new Typebase());
     globalVars.set("tatabase", new Tatabase(tatabaseDir));
     globalVars.set("inflector", new Inflector());
